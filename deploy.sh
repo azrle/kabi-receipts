@@ -6,13 +6,22 @@ set -e
 
 # Configuration
 PROJECT_ID="${1:-$(gcloud config get-value project)}"
-REGION="${2:-us-central1}"
+REGION="${2:-us-west1}"
 BACKEND_SERVICE="kabi-receipts-api"
 FRONTEND_SERVICE="kabi-receipts-web"
-BUCKET_NAME="${PROJECT_ID}-receipts"
+BUCKET_NAME="${PROJECT_ID}-original-receipt-images"
 
-echo "🚀 Deploying Kabi Receipts to Cloud Run"
-echo "   Project: ${PROJECT_ID}"
+# Get project number for the Default Compute Service Account (Standard for Cloud Run)
+echo "� Fetching project number..."
+PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')
+
+if [ -z "$PROJECT_NUMBER" ]; then
+    echo "❌ Error: Could not determine PROJECT_NUMBER for project ${PROJECT_ID}. Access to Secret Manager requires a project number."
+    exit 1
+fi
+
+echo "�🚀 Deploying Kabi Receipts to Cloud Run"
+echo "   Project: ${PROJECT_ID} (${PROJECT_NUMBER})"
 echo "   Region: ${REGION}"
 echo ""
 
@@ -38,10 +47,10 @@ gcloud services enable \
 # Note: vision.googleapis.com is no longer needed
 
 # Create Cloud Storage bucket if it doesn't exist
-echo "🪣 Creating Cloud Storage bucket..."
+echo "🪣 Checking Cloud Storage bucket..."
 if ! gsutil ls gs://${BUCKET_NAME} &> /dev/null; then
+    echo "   Creating bucket: ${BUCKET_NAME}"
     gsutil mb -l ${REGION} gs://${BUCKET_NAME}
-    echo "   Created bucket: ${BUCKET_NAME}"
 else
     echo "   Bucket already exists: ${BUCKET_NAME}"
 fi
@@ -67,9 +76,67 @@ if ! gcloud firestore databases describe --project=${PROJECT_ID} &> /dev/null; t
     gcloud firestore databases create --location=${REGION}
 fi
 
+# --- Secret Management Helper ---
+# Helper to ensure a secret exists and has a value, and that service accounts have access
+ensure_secret() {
+    local SECRET_NAME=$1
+    local PROMPT_MSG=$2
+    local DEFAULT_VAL=$3
+
+    if ! gcloud secrets describe ${SECRET_NAME} &> /dev/null; then
+        echo "🔐 Creating secret: ${SECRET_NAME}"
+        
+        local VALUE=${DEFAULT_VAL}
+        if [ -z "${VALUE}" ]; then
+            echo "⚠️  ${PROMPT_MSG}"
+            read -p "> " VALUE
+        fi
+
+        echo -n "${VALUE}" | gcloud secrets create ${SECRET_NAME} --data-file=- --replication-policy="automatic"
+    else
+        echo "✅ Secret exists: ${SECRET_NAME}"
+    fi
+
+    # Always ensure service account has access (in case the secret was created manually)
+    echo "   Ensuring Cloud Run service account access..."
+    
+    # Use the Default Compute Service Account (Standard for Cloud Run)
+    gcloud secrets add-iam-policy-binding ${SECRET_NAME} \
+        --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/secretmanager.secretAccessor" --quiet || true
+}
+
+# --- Environment Variable & Secret Setup ---
+
+echo "🔑 Checking required secrets..."
+
+# 1. Gemini API Key (Existing)
+ensure_secret "gemini-api-key" "Enter your Google Gemini API Key"
+
+# 2. Google OAuth Client Secret (New - Sensitive)
+ensure_secret "google-client-secret" "Enter your Google OAuth Client Secret"
+
+# 3. NextAuth Secret (New - Sensitive)
+RANDOM_SECRET=$(openssl rand -base64 32)
+ensure_secret "nextauth-secret" "Enter NextAuth Secret (or leave blank to generate)" "${RANDOM_SECRET}"
+
+# --- Regular Environment Variables (Non-sensitive) ---
+
+if [ -z "$GOOGLE_CLIENT_ID" ]; then
+    echo "ℹ️  GOOGLE_CLIENT_ID not found in shell environment."
+    read -p "Enter Google OAuth Client ID: " GOOGLE_CLIENT_ID
+fi
+
+if [ -z "$ALLOWED_USERS" ]; then
+    echo "ℹ️  ALLOWED_USERS not found in shell environment."
+    read -p "Enter allowed emails (comma separated, or leave blank): " ALLOWED_USERS
+fi
+
+
 # Deploy Backend API
 echo ""
 echo "🏗️ Deploying Backend API..."
+# Initial deployment with dummy CORS, will update after frontend is deployed
 gcloud run deploy ${BACKEND_SERVICE} \
     --source . \
     --region ${REGION} \
@@ -79,7 +146,7 @@ gcloud run deploy ${BACKEND_SERVICE} \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 2 \
-    --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${BUCKET_NAME}" \
+    --set-env-vars "^|^GCP_PROJECT_ID=${PROJECT_ID}|GCS_BUCKET_NAME=${BUCKET_NAME}|STORAGE_MODE=gcs|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}|ALLOWED_USERS=${ALLOWED_USERS}|ALLOWED_ORIGINS=http://localhost:3000" \
     --set-secrets "GOOGLE_API_KEY=gemini-api-key:latest"
 
 # Get backend URL
@@ -99,12 +166,24 @@ gcloud run deploy ${FRONTEND_SERVICE} \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 2 \
-    --set-env-vars "NEXT_PUBLIC_API_URL=${BACKEND_URL}/api" \
-    --build-env-vars "NEXT_PUBLIC_API_URL=${BACKEND_URL}/api"
+    --set-env-vars "^|^NEXT_PUBLIC_API_URL=${BACKEND_URL}/api|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
+    --set-secrets "GOOGLE_CLIENT_SECRET=google-client-secret:latest,NEXTAUTH_SECRET=nextauth-secret:latest" \
+    --set-build-env-vars "NEXT_PUBLIC_API_URL=${BACKEND_URL}/api"
 cd ..
 
 # Get frontend URL
 FRONTEND_URL=$(gcloud run services describe ${FRONTEND_SERVICE} --region ${REGION} --format='value(status.url)')
+
+echo ""
+echo "🔄 Updating Backend with correct CORS origin..."
+gcloud run services update ${BACKEND_SERVICE} \
+    --region ${REGION} \
+    --update-env-vars "ALLOWED_ORIGINS=${FRONTEND_URL}"
+
+echo "🔄 Updating Frontend with correctly configured NEXTAUTH_URL..."
+gcloud run services update ${FRONTEND_SERVICE} \
+    --region ${REGION} \
+    --update-env-vars "NEXTAUTH_URL=${FRONTEND_URL}"
 
 echo ""
 echo "✅ Deployment complete!"
@@ -113,12 +192,7 @@ echo "🌐 Your application is live:"
 echo "   Frontend: ${FRONTEND_URL}"
 echo "   Backend API: ${BACKEND_URL}"
 echo ""
-echo "📝 Next steps (if not already done):"
-echo "   1. Create a secret for Gemini API key:"
-echo "      echo -n 'YOUR_API_KEY' | gcloud secrets create gemini-api-key --data-file=-"
-echo ""
-echo "   2. Grant Cloud Run access to the secret:"
-echo "      gcloud secrets add-iam-policy-binding gemini-api-key \\"
-echo "        --member=serviceAccount:${PROJECT_ID}@appspot.gserviceaccount.com \\"
-echo "        --role=roles/secretmanager.secretAccessor"
+echo "📝 Note:"
+echo "   Your secrets are now stored in Google Cloud Secret Manager."
+echo "   You can manage them at: https://console.cloud.google.com/security/secret-manager?project=${PROJECT_ID}"
 echo ""
