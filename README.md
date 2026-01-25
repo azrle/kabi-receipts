@@ -44,6 +44,8 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env:
 # GOOGLE_API_KEY=your_key_here
+# GOOGLE_CLIENT_ID=your_oauth_client_id
+# ALLOWED_USERS=email1@gmail.com,email2@gmail.com
 # STORAGE_MODE=local
 ```
 
@@ -57,10 +59,19 @@ uvicorn app.main:app --reload --port 8080
 cd frontend
 npm install
 
+# Configure Environment
+cp .env.example .env.local
+# Edit .env.local (DO NOT use quotes around values):
+# GOOGLE_CLIENT_ID=your-client-id
+# GOOGLE_CLIENT_SECRET=your-client-secret
+# NEXTAUTH_URL=http://localhost:3000
+# NEXTAUTH_SECRET=random-32-char-string
+
 # Run Frontend
 npm run dev
 ```
 Visit `http://localhost:3000`
+
 
 ## ☁️ Cloud Deployment (GCP)
 
@@ -71,6 +82,10 @@ For production deployment on Google Cloud Run.
    STORAGE_MODE=gcs
    GCP_PROJECT_ID=your-project
    GCS_BUCKET_NAME=your-bucket
+   
+   # Auth
+   GOOGLE_CLIENT_ID=...
+   ALLOWED_USERS=user@example.com
    ```
 
 2. **Deploy:**

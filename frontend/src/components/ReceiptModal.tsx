@@ -1,9 +1,11 @@
 'use client';
 
-import { Fragment } from 'react';
+import { useState, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Receipt, formatTotal, getMerchant, getCurrencySymbol } from '@/lib/types';
+import { getReceiptImageUrl } from '@/lib/api';
+import toast from 'react-hot-toast';
 
 interface ReceiptModalProps {
     receipt: Receipt | null;
@@ -131,16 +133,7 @@ export default function ReceiptModal({ receipt, isOpen, onClose }: ReceiptModalP
                                     )}
 
                                     {/* Download Button */}
-                                    <div className="mt-6 text-center">
-                                        <a
-                                            href={receipt.file_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-400 hover:from-purple-500 hover:to-purple-300 text-white font-medium rounded-full shadow-lg shadow-purple-500/30 transition-all hover:-translate-y-0.5"
-                                        >
-                                            📥 Download Original
-                                        </a>
-                                    </div>
+                                    <DownloadSection receipt={receipt} />
                                 </div>
                             </Dialog.Panel>
                         </Transition.Child>
@@ -156,6 +149,39 @@ function DetailItem({ label, value }: { label: string; value: string }) {
         <div className="p-4 bg-white/5 rounded-lg">
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
             <p className="text-lg font-medium">{value}</p>
+        </div>
+    );
+}
+
+function DownloadSection({ receipt }: { receipt: Receipt }) {
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleDownload = async () => {
+        setIsLoading(true);
+        try {
+            const { url } = await getReceiptImageUrl(receipt.id);
+            window.open(url, '_blank');
+        } catch (error) {
+            toast.error('Failed to get download URL');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="mt-6 text-center">
+            <button
+                onClick={handleDownload}
+                disabled={isLoading}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-purple-400 hover:from-purple-500 hover:to-purple-300 text-white font-medium rounded-full shadow-lg shadow-purple-500/30 transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {isLoading ? (
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                    '📥'
+                )}
+                Download Original
+            </button>
         </div>
     );
 }

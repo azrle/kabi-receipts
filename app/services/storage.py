@@ -92,22 +92,50 @@ class StorageService:
         return filename, url
 
     def _upload_to_gcs(self, filename: str, content: bytes, content_type: str) -> Tuple[str, str]:
-        """Upload file to GCS."""
+        """Upload file to GCS (Private)."""
         blob_name = f"receipts/{filename}"
         blob = self.bucket.blob(blob_name)
+        
+        # Upload as private (default)
         blob.upload_from_string(content, content_type=content_type)
         
+        # Return blob_name as the identifier. 
+        # The URL will be generated dynamically via get_signed_url
+        return blob_name, "" 
+
+    def get_signed_url(self, file_identifier: str) -> str:
+        """
+        Generate a temporary signed URL for a file.
+        For local files, returns the static URL.
+        """
+        if self.mode == "local":
+            # In local mode, we reconstructed the URL from uploads dir previously.
+            # But the storage design returned (blob_name, url) tuple.
+            # To be consistent, we might just return the identifier as the 'url' if it's already a full URL?
+            # Actually, local upload returns a full URL in the second position.
+            # However, `get_receipt` will call this.
+            # Let's assume file_identifier is the blob_name/filename.
+            
+            # If it looks like a URL, return it
+            if file_identifier.startswith("http"):
+                return file_identifier
+                
+            # Otherwise construct local URL (harder without request context base_url here)
+            # We'll just assume relative path if it's local
+            return f"/uploads/{file_identifier}"
+
+        # GCS Mode
         try:
-            blob.make_public()
-            url = blob.public_url
-        except GoogleCloudError:
-            url = blob.generate_signed_url(
+            blob = self.bucket.blob(file_identifier)
+            return blob.generate_signed_url(
                 version="v4",
-                expiration=timedelta(days=7),
+                expiration=timedelta(minutes=60),
                 method="GET"
             )
-            
-        return blob_name, url
+        except GoogleCloudError as e:
+            logger.error(f"Error generating signed URL: {e}")
+            return ""
+
     
     def delete_file(self, file_id: str) -> bool:
         """Delete a file from storage."""

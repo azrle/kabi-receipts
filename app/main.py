@@ -24,6 +24,9 @@ from app.services import (
     extractor_service,
     database_service
 )
+from app.security import verify_user
+from fastapi import Depends
+
 
 # Configure logging
 def setup_logging():
@@ -70,21 +73,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+settings = get_settings()
+
 # Add CORS middleware
+origins = settings.allowed_origins.split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "*", 
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount uploads directory for local storage mode
-settings = get_settings()
 # Normalize storage_mode check
 if settings.storage_mode.lower() == "local":
     # Critical: Ensure directory exists BEFORE mounting or StaticFiles throws error
@@ -179,7 +179,8 @@ async def health_check():
 async def upload_receipt(
     request: Request,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    user_info: dict = Depends(verify_user)
 ):
     content_type = validate_file(file)
     settings = get_settings()
@@ -202,6 +203,11 @@ async def upload_receipt(
             content_type=content_type,
             base_url=base_url
         )
+        
+        if settings.storage_mode.lower() == "gcs":
+             # In GCS mode, file_url from upload is empty string as it is private
+             # We can just leave it empty or generate a short lived one immediately
+             file_url = storage_service.get_signed_url(blob_name)
         
         receipt = database_service.create_receipt(
             file_name=file.filename or "receipt",
@@ -228,7 +234,7 @@ async def upload_receipt(
 
 
 @app.get("/api/receipts", response_model=ReceiptListResponse)
-async def list_receipts(limit: int = 100):
+async def list_receipts(limit: int = 100, user_info: dict = Depends(verify_user)):
     try:
         receipts = database_service.list_receipts(limit=limit)
         return ReceiptListResponse(success=True, data=receipts, total=len(receipts))
@@ -237,15 +243,31 @@ async def list_receipts(limit: int = 100):
 
 
 @app.get("/api/receipts/{receipt_id}", response_model=ReceiptResponse)
-async def get_receipt(receipt_id: str):
+async def get_receipt(receipt_id: str, user_info: dict = Depends(verify_user)):
     receipt = database_service.get_receipt(receipt_id)
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
     return ReceiptResponse(success=True, data=receipt)
 
 
+@app.get("/api/receipts/{receipt_id}/image-url")
+async def get_receipt_image_url(receipt_id: str, user_info: dict = Depends(verify_user)):
+    receipt = database_service.get_receipt(receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    if not receipt.blob_name:
+        # Fallback if blob_name is missing but file_url exists (legacy/local)
+        if receipt.file_url:
+            return {"url": receipt.file_url}
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    url = storage_service.get_signed_url(receipt.blob_name)
+    return {"url": url}
+
+
 @app.delete("/api/receipts/{receipt_id}")
-async def delete_receipt(receipt_id: str):
+async def delete_receipt(receipt_id: str, user_info: dict = Depends(verify_user)):
     blob_name = database_service.delete_receipt(receipt_id)
     if not blob_name:
         raise HTTPException(status_code=404, detail="Receipt not found")

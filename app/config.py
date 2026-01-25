@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     
     # Optional: Service account credentials path
     google_application_credentials: str = ""
+
+    # Authentication & Security
+    google_client_id: str = ""
+    allowed_users: str = ""  # Comma separated list of emails
+    allowed_origins: str = "*"
+
     
     # App settings
     max_file_size_mb: int = 10

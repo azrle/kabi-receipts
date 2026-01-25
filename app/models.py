@@ -48,6 +48,7 @@ class Receipt(BaseModel):
     file_name: str
     file_url: str
     file_type: str
+    blob_name: Optional[str] = None
     extracted_data: Optional[ReceiptData] = None
     processing_status: ProcessingStatus = ProcessingStatus.PENDING
     error_message: Optional[str] = None

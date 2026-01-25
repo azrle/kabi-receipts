@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
     ],
   },
   // Proxy API requests to backend during development
+  // IMPORTANT: Exclude /api/auth/* (NextAuth routes) from being proxied
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
     // Only proxy if using relative /api path
@@ -26,8 +27,9 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+        // Proxy backend receipts API but NOT /api/auth (NextAuth)
+        source: '/api/receipts/:path*',
+        destination: `${backendUrl}/api/receipts/:path*`,
       },
       {
         source: '/uploads/:path*',

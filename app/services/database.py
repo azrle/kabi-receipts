@@ -171,6 +171,7 @@ class DatabaseService:
             file_name=data["file_name"],
             file_url=data["file_url"],
             file_type=data["file_type"],
+            blob_name=data.get("blob_name"),
             extracted_data=extracted_data,
             processing_status=ProcessingStatus(data.get("processing_status", "pending")),
             error_message=data.get("error_message"),
