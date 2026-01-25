@@ -134,7 +134,6 @@ async def process_receipt(receipt_id: str, file_content: bytes, content_type: st
         # Update status
         database_service.update_receipt_processing(
             receipt_id=receipt_id,
-            raw_text="[Processed by Multimodal AI]",
             extracted_data=None,
             status=ProcessingStatus.PROCESSING
         )
@@ -145,7 +144,6 @@ async def process_receipt(receipt_id: str, file_content: bytes, content_type: st
         # Update database with results
         database_service.update_receipt_processing(
             receipt_id=receipt_id,
-            raw_text="[Processed by Multimodal AI]",
             extracted_data=extracted_data,
             status=ProcessingStatus.COMPLETED
         )
@@ -156,7 +154,6 @@ async def process_receipt(receipt_id: str, file_content: bytes, content_type: st
         logger.error(f"❌ Error processing receipt {receipt_id}: {str(e)}")
         database_service.update_receipt_processing(
             receipt_id=receipt_id,
-            raw_text="",
             extracted_data=None,
             status=ProcessingStatus.FAILED,
             error_message=str(e)

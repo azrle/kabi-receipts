@@ -51,7 +51,6 @@ class DatabaseService:
             "file_url": file_url,
             "file_type": file_type,
             "blob_name": blob_name,
-            "raw_text": None,
             "extracted_data": None,
             "processing_status": ProcessingStatus.PENDING.value,
             "error_message": None,
@@ -69,15 +68,14 @@ class DatabaseService:
     def update_receipt_processing(
         self,
         receipt_id: str,
-        raw_text: str,
         extracted_data: Optional[ReceiptData],
         status: ProcessingStatus,
         error_message: Optional[str] = None
     ) -> bool:
         if self.mode == "gcs":
-            return self._update_firestore(receipt_id, raw_text, extracted_data, status, error_message)
+            return self._update_firestore(receipt_id, extracted_data, status, error_message)
         else:
-            return self._update_local(receipt_id, raw_text, extracted_data, status, error_message)
+            return self._update_local(receipt_id, extracted_data, status, error_message)
 
     def get_receipt(self, receipt_id: str) -> Optional[Receipt]:
         if self.mode == "gcs":
@@ -173,7 +171,6 @@ class DatabaseService:
             file_name=data["file_name"],
             file_url=data["file_url"],
             file_type=data["file_type"],
-            raw_text=data.get("raw_text"),
             extracted_data=extracted_data,
             processing_status=ProcessingStatus(data.get("processing_status", "pending")),
             error_message=data.get("error_message"),
@@ -205,13 +202,12 @@ class DatabaseService:
         db = self._load_local_db()
         return db.get(receipt_id)
 
-    def _update_local(self, receipt_id, raw_text, extracted_data, status, error_message):
+    def _update_local(self, receipt_id, extracted_data, status, error_message):
         db = self._load_local_db()
         if receipt_id not in db:
             return False
         
         item = db[receipt_id]
-        item["raw_text"] = raw_text
         item["processing_status"] = status.value
         item["error_message"] = error_message
         item["updated_at"] = datetime.utcnow().isoformat()
@@ -222,10 +218,9 @@ class DatabaseService:
         self._write_local_db(db)
         return True
 
-    def _update_firestore(self, receipt_id, raw_text, extracted_data, status, error_message):
+    def _update_firestore(self, receipt_id, extracted_data, status, error_message):
         doc_ref = self.firestore.collection(self.COLLECTION_NAME).document(receipt_id)
         update_data = {
-            "raw_text": raw_text,
             "processing_status": status.value,
             "error_message": error_message,
             "updated_at": datetime.utcnow()
