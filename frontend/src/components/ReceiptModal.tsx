@@ -51,84 +51,114 @@ export default function ReceiptModal({ receipt, isOpen, onClose }: ReceiptModalP
                         >
                             <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-[#1a1a2e] border border-white/10 shadow-xl transition-all">
                                 {/* Header */}
-                                <div className="flex items-center justify-between p-6 border-b border-white/10">
-                                    <Dialog.Title className="text-xl font-semibold">
-                                        {getMerchant(receipt)}
-                                    </Dialog.Title>
+                                <div className="flex items-start justify-between p-6 border-b border-white/10 bg-white/5">
+                                    <div className="space-y-1">
+                                        <Dialog.Title className="text-2xl font-bold text-white tracking-tight">
+                                            {getMerchant(receipt)}
+                                        </Dialog.Title>
+                                        <div className="flex items-center gap-2 text-sm text-gray-400">
+                                            <span>{ed?.date || 'Unknown Date'}</span>
+                                            {ed?.category && (
+                                                <>
+                                                    <span>•</span>
+                                                    <span className="px-2 py-0.5 rounded-full bg-white/10 text-xs font-medium text-gray-300">
+                                                        {ed.category}
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
                                     <button
                                         onClick={onClose}
-                                        className="text-gray-400 hover:text-white transition-colors"
+                                        className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
                                     >
                                         <XMarkIcon className="w-6 h-6" />
                                     </button>
                                 </div>
 
                                 {/* Content */}
-                                <div className="p-6 max-h-[70vh] overflow-y-auto">
+                                <div className="p-6 max-h-[70vh] overflow-y-auto space-y-8">
 
-                                    {/* Details Grid */}
-                                    <div className="grid grid-cols-2 gap-4 mb-6">
-                                        <DetailItem label="Merchant" value={ed?.merchant || 'Unknown'} />
-                                        <DetailItem label="Date" value={ed?.date || 'Unknown'} />
-                                        <DetailItem label="Total" value={formatTotal(receipt) || 'Unknown'} />
-                                        <DetailItem label="Payment Method" value={ed?.payment_method || 'Unknown'} />
-                                        {ed?.subtotal != null && (
-                                            <DetailItem label="Subtotal" value={`${symbol}${ed.subtotal.toFixed(2)}`} />
-                                        )}
-                                        {ed?.tax != null && (
-                                            <DetailItem label="Tax" value={`${symbol}${ed.tax.toFixed(2)}`} />
-                                        )}
-                                        {ed?.tip != null && (
-                                            <DetailItem label="Tip" value={`${symbol}${ed.tip.toFixed(2)}`} />
-                                        )}
-                                        {ed?.category && (
-                                            <DetailItem label="Category" value={ed.category} />
-                                        )}
+                                    {/* Line Items Table */}
+                                    <div className="overflow-hidden rounded-lg border border-white/5">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-white/5">
+                                                <tr className="border-b border-white/5 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                                    <th className="px-4 py-3 w-1/2">Description</th>
+                                                    <th className="px-4 py-3 text-center">Qty</th>
+                                                    <th className="px-4 py-3 text-right">Price</th>
+                                                    <th className="px-4 py-3 text-right">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {items.length > 0 ? (
+                                                    items.map((item, idx) => (
+                                                        <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                                            <td className="px-4 py-3 text-gray-200">{item.description}</td>
+                                                            <td className="px-4 py-3 text-center text-gray-400">{item.quantity || 1}</td>
+                                                            <td className="px-4 py-3 text-right text-gray-400">
+                                                                {item.unit_price != null ? `${symbol}${item.unit_price.toFixed(2)}` : '-'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-medium text-gray-200">
+                                                                {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan={4} className="px-4 py-6 text-center text-gray-500 italic">
+                                                            No line items extracted
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
 
-                                    {/* Line Items */}
-                                    {items.length > 0 && (
-                                        <div className="mb-6">
-                                            <h3 className="text-lg font-semibold mb-3">Line Items</h3>
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="border-b border-white/10">
-                                                            <th className="text-left py-2 px-3 text-gray-500 font-medium uppercase text-xs tracking-wide">Description</th>
-                                                            <th className="text-left py-2 px-3 text-gray-500 font-medium uppercase text-xs tracking-wide">Qty</th>
-                                                            <th className="text-left py-2 px-3 text-gray-500 font-medium uppercase text-xs tracking-wide">Price</th>
-                                                            <th className="text-left py-2 px-3 text-gray-500 font-medium uppercase text-xs tracking-wide">Total</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {items.map((item, idx) => (
-                                                            <tr key={idx} className="border-b border-white/5 last:border-0">
-                                                                <td className="py-2 px-3">{item.description}</td>
-                                                                <td className="py-2 px-3">{item.quantity || 1}</td>
-                                                                <td className="py-2 px-3">
-                                                                    {item.unit_price != null ? `${symbol}${item.unit_price.toFixed(2)}` : '-'}
-                                                                </td>
-                                                                <td className="py-2 px-3">
-                                                                    {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                                    {/* Calculation Stack */}
+                                    <div className="flex flex-col items-end space-y-2 text-sm border-t border-white/10 pt-6">
+                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3">
+                                            <span className="text-gray-400">Subtotal</span>
+                                            <span className="font-medium">{ed?.subtotal != null ? `${symbol}${ed.subtotal.toFixed(2)}` : '-'}</span>
                                         </div>
-                                    )}
+                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3">
+                                            <span className="text-gray-400">Tax</span>
+                                            <span className="font-medium">{ed?.tax != null ? `${symbol}${ed.tax.toFixed(2)}` : '-'}</span>
+                                        </div>
+                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3 border-b border-white/10 pb-2">
+                                            <span className="text-gray-400">Tip</span>
+                                            <span className="font-medium">{ed?.tip != null ? `${symbol}${ed.tip.toFixed(2)}` : '-'}</span>
+                                        </div>
+                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3 pt-1">
+                                            <span className="text-base font-bold text-white">Total</span>
+                                            <span className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                                                {formatTotal(receipt) || '0.00'}
+                                            </span>
+                                        </div>
+                                    </div>
 
-                                    {/* Notes */}
-                                    {ed?.notes && (
-                                        <DetailItem label="Notes" value={ed.notes} />
-                                    )}
+                                    {/* Additional Info (Footer) */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                                        {/* Payment Info */}
+                                        <div className="p-4 rounded-lg bg-white/5 space-y-1">
+                                            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Payment Method</p>
+                                            <p className="text-sm font-medium text-gray-200">{ed?.payment_method || '—'}</p>
+                                        </div>
 
-                                    {/* Error */}
+                                        {/* Notes */}
+                                        <div className="p-4 rounded-lg bg-white/5 space-y-1">
+                                            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Notes</p>
+                                            <p className="text-sm text-gray-300 italic">
+                                                {ed?.notes || 'No notes available'}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Error Message */}
                                     {receipt.error_message && (
-                                        <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                                            <p className="text-xs text-red-500 uppercase font-medium mb-1">Error</p>
-                                            <p className="text-red-400">{receipt.error_message}</p>
+                                        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                                            <p className="text-xs text-red-500 uppercase font-medium mb-1">Extraction Error</p>
+                                            <p className="text-sm text-red-400">{receipt.error_message}</p>
                                         </div>
                                     )}
 
