@@ -1,0 +1,13 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "-t",
+        "gcr.io/$PROJECT_ID/$_FRONTEND_SERVICE",
+        ".",
+        "--build-arg",
+        "NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL",
+      ]
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/$_FRONTEND_SERVICE"]

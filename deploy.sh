@@ -1,8 +1,43 @@
 #!/bin/bash
 # Deploy Kabi Receipts to Google Cloud Run
-# Usage: ./deploy.sh [PROJECT_ID] [REGION]
+# Usage: ./deploy.sh [PROJECT_ID] [REGION] [--backend] [--frontend]
+# Options:
+#   --backend, -b   Deploy only the backend API
+#   --frontend, -f  Deploy only the frontend web app
+#   (default: deploy both if no options specified)
 
 set -e
+
+# Parse arguments
+DEPLOY_BACKEND=false
+DEPLOY_FRONTEND=false
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --backend|-b)
+            DEPLOY_BACKEND=true
+            shift
+            ;;
+        --frontend|-f)
+            DEPLOY_FRONTEND=true
+            shift
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# If no specific service was requested, deploy both
+if [ "$DEPLOY_BACKEND" = false ] && [ "$DEPLOY_FRONTEND" = false ]; then
+    DEPLOY_BACKEND=true
+    DEPLOY_FRONTEND=true
+fi
+
+# Restore positional arguments
+set -- "${POSITIONAL_ARGS[@]}"
 
 # Configuration
 PROJECT_ID="${1:-$(gcloud config get-value project)}"
@@ -44,7 +79,6 @@ gcloud services enable \
     firestore.googleapis.com \
     storage.googleapis.com \
     secretmanager.googleapis.com
-# Note: vision.googleapis.com is no longer needed
 
 # Create Cloud Storage bucket if it doesn't exist
 echo "🪣 Checking Cloud Storage bucket..."
@@ -134,56 +168,75 @@ fi
 
 
 # Deploy Backend API
-echo ""
-echo "🏗️ Deploying Backend API..."
-# Initial deployment with dummy CORS, will update after frontend is deployed
-gcloud run deploy ${BACKEND_SERVICE} \
-    --source . \
-    --region ${REGION} \
-    --platform managed \
-    --allow-unauthenticated \
-    --memory 512Mi \
-    --cpu 1 \
-    --min-instances 0 \
-    --max-instances 2 \
-    --set-env-vars "^|^GCP_PROJECT_ID=${PROJECT_ID}|GCS_BUCKET_NAME=${BUCKET_NAME}|STORAGE_MODE=gcs|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}|ALLOWED_USERS=${ALLOWED_USERS}|ALLOWED_ORIGINS=http://localhost:3000" \
-    --set-secrets "GOOGLE_API_KEY=gemini-api-key:latest"
+if [ "$DEPLOY_BACKEND" = true ]; then
+    echo ""
+    echo "🏗️ Deploying Backend API..."
+    # Initial deployment with dummy CORS, will update after frontend is deployed
+    gcloud run deploy ${BACKEND_SERVICE} \
+        --source . \
+        --region ${REGION} \
+        --platform managed \
+        --allow-unauthenticated \
+        --memory 512Mi \
+        --cpu 1 \
+        --min-instances 0 \
+        --max-instances 2 \
+        --set-env-vars "^|^GCP_PROJECT_ID=${PROJECT_ID}|GCS_BUCKET_NAME=${BUCKET_NAME}|STORAGE_MODE=gcs|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}|ALLOWED_USERS=${ALLOWED_USERS}|ALLOWED_ORIGINS=http://localhost:3000" \
+        --set-secrets "GOOGLE_API_KEY=gemini-api-key:latest"
+fi
 
-# Get backend URL
-BACKEND_URL=$(gcloud run services describe ${BACKEND_SERVICE} --region ${REGION} --format='value(status.url)')
-echo "   Backend deployed: ${BACKEND_URL}"
+# Get backend URL (even if not deploying, we might need it for frontend)
+BACKEND_URL=$(gcloud run services describe ${BACKEND_SERVICE} --region ${REGION} --format='value(status.url)' 2>/dev/null || echo "")
+if [ -n "$BACKEND_URL" ]; then
+    echo "   Backend URL: ${BACKEND_URL}"
+else
+    echo "   ⚠️  Backend service not found or not yet deployed."
+fi
 
 # Deploy Frontend
-echo ""
-echo "🎨 Deploying Frontend..."
-cd frontend
-gcloud run deploy ${FRONTEND_SERVICE} \
-    --source . \
-    --region ${REGION} \
-    --platform managed \
-    --allow-unauthenticated \
-    --memory 256Mi \
-    --cpu 1 \
-    --min-instances 0 \
-    --max-instances 2 \
-    --set-env-vars "^|^NEXT_PUBLIC_API_URL=${BACKEND_URL}/api|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
-    --set-secrets "GOOGLE_CLIENT_SECRET=google-client-secret:latest,NEXTAUTH_SECRET=nextauth-secret:latest" \
-    --set-build-env-vars "NEXT_PUBLIC_API_URL=${BACKEND_URL}/api"
-cd ..
+if [ "$DEPLOY_FRONTEND" = true ]; then
+    if [ -z "$BACKEND_URL" ]; then
+        echo "❌ Error: Cannot deploy frontend without backend URL. Please deploy backend first."
+        exit 1
+    fi
+
+    echo ""
+    echo "🎨 Deploying Frontend..."
+    cd frontend
+
+    gcloud builds submit --config cloudbuild.yaml \
+        --substitutions="_FRONTEND_SERVICE=${FRONTEND_SERVICE},_NEXT_PUBLIC_API_URL=${BACKEND_URL}/api" .
+
+    gcloud run deploy ${FRONTEND_SERVICE} \
+        --image gcr.io/${PROJECT_ID}/${FRONTEND_SERVICE} \
+        --region ${REGION} \
+        --platform managed \
+        --allow-unauthenticated \
+        --memory 256Mi \
+        --cpu 1 \
+        --min-instances 0 \
+        --max-instances 2 \
+        --set-env-vars "^|^NEXT_PUBLIC_API_URL=${BACKEND_URL}/api|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
+        --set-secrets "GOOGLE_CLIENT_SECRET=google-client-secret:latest,NEXTAUTH_SECRET=nextauth-secret:latest" \
+        --set-build-env-vars "NEXT_PUBLIC_API_URL=${BACKEND_URL}/api"
+    cd ..
+fi
 
 # Get frontend URL
-FRONTEND_URL=$(gcloud run services describe ${FRONTEND_SERVICE} --region ${REGION} --format='value(status.url)')
+FRONTEND_URL=$(gcloud run services describe ${FRONTEND_SERVICE} --region ${REGION} --format='value(status.url)' 2>/dev/null || echo "")
 
-echo ""
-echo "🔄 Updating Backend with correct CORS origin..."
-gcloud run services update ${BACKEND_SERVICE} \
-    --region ${REGION} \
-    --update-env-vars "ALLOWED_ORIGINS=${FRONTEND_URL}"
+if [ -n "$FRONTEND_URL" ] && [ -n "$BACKEND_URL" ]; then
+    echo ""
+    echo "🔄 Updating Backend with correct CORS origin..."
+    gcloud run services update ${BACKEND_SERVICE} \
+        --region ${REGION} \
+        --update-env-vars "ALLOWED_ORIGINS=${FRONTEND_URL}"
 
-echo "🔄 Updating Frontend with correctly configured NEXTAUTH_URL..."
-gcloud run services update ${FRONTEND_SERVICE} \
-    --region ${REGION} \
-    --update-env-vars "NEXTAUTH_URL=${FRONTEND_URL}"
+    echo "🔄 Updating Frontend with correctly configured NEXTAUTH_URL..."
+    gcloud run services update ${FRONTEND_SERVICE} \
+        --region ${REGION} \
+        --update-env-vars "NEXTAUTH_URL=${FRONTEND_URL}"
+fi
 
 echo ""
 echo "✅ Deployment complete!"
