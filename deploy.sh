@@ -144,13 +144,26 @@ ensure_secret() {
 
 echo "🔑 Checking required secrets..."
 
-# 1. Gemini API Key (Existing)
+# 1. Google Cloud Run Service Acccount Credentials (New - Sensitive)
+GOOGLE_APPLICATION_CREDENTIALS_SECRET="google-application-credentials"
+if ! gcloud secrets describe ${GOOGLE_APPLICATION_CREDENTIALS_SECRET} &> /dev/null; then
+    if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+        echo "ℹ️  GOOGLE_APPLICATION_CREDENTIALS not found in shell environment."
+        read -p "Enter Google Cloud Run Service Acccount Credentials: " GOOGLE_APPLICATION_CREDENTIALS
+    fi
+    gcloud secrets create ${GOOGLE_APPLICATION_CREDENTIALS_SECRET} --data-file="${GOOGLE_APPLICATION_CREDENTIALS}" --replication-policy="automatic"
+    gcloud secrets add-iam-policy-binding ${GOOGLE_APPLICATION_CREDENTIALS_SECRET} \
+        --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+        --role="roles/secretmanager.secretAccessor" --quiet || true
+fi
+
+# 2. Gemini API Key (Existing)
 ensure_secret "gemini-api-key" "Enter your Google Gemini API Key"
 
-# 2. Google OAuth Client Secret (New - Sensitive)
+# 3. Google OAuth Client Secret (New - Sensitive)
 ensure_secret "google-client-secret" "Enter your Google OAuth Client Secret"
 
-# 3. NextAuth Secret (New - Sensitive)
+# 4. NextAuth Secret (New - Sensitive)
 RANDOM_SECRET=$(openssl rand -base64 32)
 ensure_secret "nextauth-secret" "Enter NextAuth Secret (or leave blank to generate)" "${RANDOM_SECRET}"
 
@@ -181,8 +194,8 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --cpu 1 \
         --min-instances 0 \
         --max-instances 2 \
-        --set-env-vars "^|^GCP_PROJECT_ID=${PROJECT_ID}|GCS_BUCKET_NAME=${BUCKET_NAME}|STORAGE_MODE=gcs|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}|ALLOWED_USERS=${ALLOWED_USERS}|ALLOWED_ORIGINS=http://localhost:3000" \
-        --set-secrets "GOOGLE_API_KEY=gemini-api-key:latest"
+        --set-env-vars "^|^GCP_PROJECT_ID=${PROJECT_ID}|GCS_BUCKET_NAME=${BUCKET_NAME}|STORAGE_MODE=gcs|GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}|ALLOWED_USERS=${ALLOWED_USERS}|ALLOWED_ORIGINS=http://localhost:3000|GOOGLE_APPLICATION_CREDENTIALS=/secrets/${GOOGLE_APPLICATION_CREDENTIALS_SECRET}" \
+        --set-secrets "GOOGLE_API_KEY=gemini-api-key:latest,/secrets/${GOOGLE_APPLICATION_CREDENTIALS_SECRET}=${GOOGLE_APPLICATION_CREDENTIALS_SECRET}:latest"
 fi
 
 # Get backend URL (even if not deploying, we might need it for frontend)

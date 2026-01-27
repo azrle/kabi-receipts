@@ -8,6 +8,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from pathlib import Path
+import google.auth
+from google.auth import iam
+from google.auth.transport.requests import Request
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError
 
@@ -38,7 +41,11 @@ class StorageService:
     @property
     def gcs_client(self) -> storage.Client:
         if self._gcs_client is None and self.mode == "gcs":
-            self._gcs_client = storage.Client(project=self.settings.gcp_project_id)
+            creds, project_id = google.auth.default(scopes=[
+                "https://www.googleapis.com/auth/cloud-platform"])
+            self._gcs_client = storage.Client(
+                project=self.settings.gcp_project_id,
+                credentials=creds)
         return self._gcs_client
     
     @property
@@ -129,8 +136,8 @@ class StorageService:
             blob = self.bucket.blob(file_identifier)
             return blob.generate_signed_url(
                 version="v4",
-                expiration=timedelta(minutes=60),
-                method="GET"
+                expiration=timedelta(minutes=30),
+                method="GET",
             )
         except GoogleCloudError as e:
             logger.error(f"Error generating signed URL: {e}")

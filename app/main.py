@@ -204,11 +204,6 @@ async def upload_receipt(
             base_url=base_url
         )
         
-        if settings.storage_mode.lower() == "gcs":
-             # In GCS mode, file_url from upload is empty string as it is private
-             # We can just leave it empty or generate a short lived one immediately
-             file_url = storage_service.get_signed_url(blob_name)
-        
         receipt = database_service.create_receipt(
             file_name=file.filename or "receipt",
             file_url=file_url,
