@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Receipt, formatTotal, getMerchant, getCurrencySymbol } from '@/lib/types';
 import { getReceiptImageUrl } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -11,9 +11,10 @@ interface ReceiptModalProps {
     receipt: Receipt | null;
     isOpen: boolean;
     onClose: () => void;
+    onDelete: (id: string) => void;
 }
 
-export default function ReceiptModal({ receipt, isOpen, onClose }: ReceiptModalProps) {
+export default function ReceiptModal({ receipt, isOpen, onClose, onDelete }: ReceiptModalProps) {
     if (!receipt) return null;
 
     const ed = receipt.extracted_data;
@@ -68,20 +69,33 @@ export default function ReceiptModal({ receipt, isOpen, onClose }: ReceiptModalP
                                             )}
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={onClose}
-                                        className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
-                                    >
-                                        <XMarkIcon className="w-6 h-6" />
-                                    </button>
+                                    <div className="flex items-start gap-4">
+                                        <button
+                                            onClick={() => {
+                                                onDelete(receipt.id);
+                                                onClose();
+                                            }}
+                                            className="text-gray-400 hover:text-red-400 transition-colors p-1 rounded-full hover:bg-red-500/10"
+                                            title="Delete receipt"
+                                        >
+                                            <TrashIcon className="w-6 h-6" />
+                                        </button>
+                                        <button
+                                            onClick={onClose}
+                                            className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                                        >
+                                            <XMarkIcon className="w-6 h-6" />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Content */}
                                 <div className="p-6 max-h-[70vh] overflow-y-auto space-y-8">
 
-                                    {/* Line Items Table */}
-                                    <div className="overflow-hidden rounded-lg border border-white/5">
-                                        <table className="w-full text-sm">
+                                    {/* Line Items - List View for Mobile, Table for Desktop */}
+                                    <div className="rounded-lg border border-white/5 overflow-hidden">
+                                        {/* Desktop Table */}
+                                        <table className="hidden sm:table w-full text-sm">
                                             <thead className="bg-white/5">
                                                 <tr className="border-b border-white/5 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                                                     <th className="px-4 py-3 w-1/2">Description</th>
@@ -113,6 +127,32 @@ export default function ReceiptModal({ receipt, isOpen, onClose }: ReceiptModalP
                                                 )}
                                             </tbody>
                                         </table>
+
+                                        {/* Mobile List View */}
+                                        <div className="sm:hidden divide-y divide-white/5">
+                                            {items.length > 0 ? (
+                                                items.map((item, idx) => (
+                                                    <div key={idx} className="p-4 space-y-2 hover:bg-white/5 transition-colors">
+                                                        <div className="flex justify-between items-start gap-4">
+                                                            <span className="text-gray-200 font-medium line-clamp-2">{item.description}</span>
+                                                            <span className="font-semibold text-gray-100 whitespace-nowrap">
+                                                                {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-xs text-gray-400">
+                                                            <span>Qty: {item.quantity || 1}</span>
+                                                            {item.unit_price != null && (
+                                                                <span>Price: {symbol}{item.unit_price.toFixed(2)}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="px-4 py-6 text-center text-gray-500 italic text-sm">
+                                                    No line items extracted
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Calculation Stack */}

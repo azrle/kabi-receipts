@@ -288,6 +288,7 @@ export default function Home() {
         receipt={selectedReceipt}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onDelete={handleDelete}
       />
     </main>
   );
