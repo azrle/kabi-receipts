@@ -10,6 +10,7 @@ import SearchBox from '@/components/SearchBox';
 import LoginButton from '@/components/LoginButton';
 import { Receipt, ApiError } from '@/lib/types';
 import { uploadReceipt, getReceipts, deleteReceipt } from '@/lib/api';
+import { compressImageIfPossible } from '@/lib/imageCompression';
 import { ArrowPathIcon, InboxIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 export default function Home() {
@@ -107,9 +108,22 @@ export default function Home() {
   // Handle file upload
   const handleUpload = async (file: File) => {
     setIsUploading(true);
+    let fileToUpload = file;
 
     try {
-      const response = await uploadReceipt(file);
+      // Compress image if it's an image file
+      if (file.type.startsWith('image/')) {
+        const toastId = toast.loading('Compressing image...');
+        try {
+          fileToUpload = await compressImageIfPossible(file);
+          toast.dismiss(toastId);
+        } catch (compressError) {
+          console.error('Compression failed, uploading original:', compressError);
+          toast.dismiss(toastId);
+        }
+      }
+
+      const response = await uploadReceipt(fileToUpload);
       if (response.success) {
         toast.success('Receipt uploaded! Processing with AI...');
         loadReceipts();
