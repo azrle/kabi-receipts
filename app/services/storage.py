@@ -144,6 +144,32 @@ class StorageService:
             return ""
 
     
+    def get_file_content(self, file_identifier: str) -> bytes:
+        """
+        Retrieve file content from storage.
+        
+        Args:
+            file_identifier: The blob_name or filename
+            
+        Returns:
+            Raw file bytes
+        """
+        if self.mode == "gcs":
+            try:
+                blob = self.bucket.blob(file_identifier)
+                return blob.download_as_bytes()
+            except GoogleCloudError as e:
+                logger.error(f"Error downloading from GCS: {e}")
+                raise Exception(f"Failed to retrieve file from storage: {e}")
+        else:
+            # Local mode
+            file_path = self.upload_dir / file_identifier
+            if not file_path.exists():
+                raise Exception(f"File not found: {file_identifier}")
+            
+            with open(file_path, "rb") as f:
+                return f.read()
+
     def delete_file(self, file_id: str) -> bool:
         """Delete a file from storage."""
         if self.mode == "gcs":

@@ -261,6 +261,52 @@ async def get_receipt_image_url(receipt_id: str, user_info: dict = Depends(verif
     return {"url": url}
 
 
+@app.post("/api/receipts/{receipt_id}/retry", response_model=ReceiptResponse)
+async def retry_receipt(
+    receipt_id: str,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_user)
+):
+    receipt = database_service.get_receipt(receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    if not receipt.blob_name:
+        raise HTTPException(status_code=400, detail="Cannot retry: No source file reference found")
+    
+    try:
+        # Retrieve original content
+        file_content = storage_service.get_file_content(receipt.blob_name)
+        
+        # We need the content_type, which we have in database
+        content_type = receipt.file_type
+        
+        # Trigger background task
+        background_tasks.add_task(
+            process_receipt,
+            receipt.id,
+            file_content,
+            content_type
+        )
+        
+        # Update status to pending immediately to show in UI
+        database_service.update_receipt_processing(
+            receipt_id=receipt.id,
+            extracted_data=None,
+            status=ProcessingStatus.PENDING
+        )
+        
+        return ReceiptResponse(
+            success=True,
+            data=receipt,
+            message="Retry initiated successfully."
+        )
+        
+    except Exception as e:
+        logger.error(f"Retry failed for {receipt_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Retry failed: {str(e)}")
+
+
 @app.delete("/api/receipts/{receipt_id}")
 async def delete_receipt(receipt_id: str, user_info: dict = Depends(verify_user)):
     blob_name = database_service.delete_receipt(receipt_id)

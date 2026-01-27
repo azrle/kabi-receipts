@@ -1,18 +1,19 @@
 import { useState, useMemo } from 'react';
 import { Receipt, formatTotal, getMerchant, ProcessingStatus } from '@/lib/types';
-import { TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, ChevronUpIcon, ChevronDownIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 interface ReceiptTableProps {
     receipts: Receipt[];
     onView: (receipt: Receipt) => void;
     onDelete: (id: string) => void;
+    onRetry: (id: string) => void;
     onSearch: (query: string) => void;
 }
 
 type SortField = 'date' | 'merchant' | 'total' | 'category' | 'status' | 'upload';
 type SortOrder = 'asc' | 'desc';
 
-function StatusBadge({ status }: { status: ProcessingStatus }) {
+function StatusBadge({ status, onRetry }: { status: ProcessingStatus; onRetry?: () => void }) {
     const styles = {
         pending: 'bg-yellow-500/20 text-yellow-400',
         processing: 'bg-purple-500/20 text-purple-400',
@@ -28,16 +29,30 @@ function StatusBadge({ status }: { status: ProcessingStatus }) {
     };
 
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${styles[status]}`}>
-            {status === 'processing' && (
-                <span className="w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${styles[status]}`}>
+                {status === 'processing' && (
+                    <span className="w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                )}
+                {labels[status]}
+            </span>
+            {status === 'failed' && onRetry && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRetry();
+                    }}
+                    className="p-1 rounded-md bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                    title="Retry Processing"
+                >
+                    <ArrowPathIcon className="w-3.5 h-3.5" />
+                </button>
             )}
-            {labels[status]}
-        </span>
+        </div>
     );
 }
 
-export default function ReceiptTable({ receipts, onView, onDelete, onSearch }: ReceiptTableProps) {
+export default function ReceiptTable({ receipts, onView, onDelete, onRetry, onSearch }: ReceiptTableProps) {
     const [sortField, setSortField] = useState<SortField>('date');
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
@@ -225,8 +240,8 @@ export default function ReceiptTable({ receipts, onView, onDelete, onSearch }: R
                                             <span className="text-gray-500">—</span>
                                         )}
                                     </td>
-                                    <td className="py-4 px-4">
-                                        <StatusBadge status={receipt.processing_status} />
+                                    <td className="py-4 px-4 text-right">
+                                        <StatusBadge status={receipt.processing_status} onRetry={() => onRetry(receipt.id)} />
                                     </td>
                                 </tr>
                             );
@@ -248,7 +263,7 @@ export default function ReceiptTable({ receipts, onView, onDelete, onSearch }: R
                                 <h3 className="font-bold text-gray-100">{getMerchant(receipt)}</h3>
                                 <p className="text-xs text-gray-500">{receipt.extracted_data?.date || 'No date'}</p>
                             </div>
-                            <StatusBadge status={receipt.processing_status} />
+                            <StatusBadge status={receipt.processing_status} onRetry={() => onRetry(receipt.id)} />
                         </div>
 
                         <div className="flex justify-between items-center">

@@ -9,7 +9,7 @@ import ReceiptModal from '@/components/ReceiptModal';
 import SearchBox from '@/components/SearchBox';
 import LoginButton from '@/components/LoginButton';
 import { Receipt, ApiError } from '@/lib/types';
-import { uploadReceipt, getReceipts, deleteReceipt } from '@/lib/api';
+import { uploadReceipt, getReceipts, deleteReceipt, retryReceipt } from '@/lib/api';
 import { compressImageIfPossible } from '@/lib/imageCompression';
 import { ArrowPathIcon, InboxIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
@@ -155,8 +155,23 @@ export default function Home() {
       await deleteReceipt(id);
       toast.success('Receipt deleted successfully');
       loadReceipts();
+      if (selectedReceipt?.id === id) {
+        setIsModalOpen(false);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Delete failed');
+    }
+  };
+
+  // Handle retry receipt
+  const handleRetry = async (id: string) => {
+    const toastId = toast.loading('Initiating retry...');
+    try {
+      await retryReceipt(id);
+      toast.success('Processing restarted', { id: toastId });
+      loadReceipts();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Retry failed', { id: toastId });
     }
   };
 
@@ -276,6 +291,7 @@ export default function Home() {
                 receipts={filteredReceipts}
                 onView={handleView}
                 onDelete={handleDelete}
+                onRetry={handleRetry}
                 onSearch={setSearchQuery}
               />
             )}
@@ -289,6 +305,7 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onDelete={handleDelete}
+        onRetry={handleRetry}
       />
     </main>
   );

@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, TrashIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { Receipt, formatTotal, getMerchant, getCurrencySymbol } from '@/lib/types';
 import { getReceiptImageUrl } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -12,9 +12,10 @@ interface ReceiptModalProps {
     isOpen: boolean;
     onClose: () => void;
     onDelete: (id: string) => void;
+    onRetry: (id: string) => void;
 }
 
-export default function ReceiptModal({ receipt, isOpen, onClose, onDelete }: ReceiptModalProps) {
+export default function ReceiptModal({ receipt, isOpen, onClose, onDelete, onRetry }: ReceiptModalProps) {
     if (!receipt) return null;
 
     const ed = receipt.extracted_data;
@@ -196,9 +197,18 @@ export default function ReceiptModal({ receipt, isOpen, onClose, onDelete }: Rec
 
                                     {/* Error Message */}
                                     {receipt.error_message && (
-                                        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                                            <p className="text-xs text-red-500 uppercase font-medium mb-1">Extraction Error</p>
-                                            <p className="text-sm text-red-400">{receipt.error_message}</p>
+                                        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex justify-between items-start gap-4">
+                                            <div>
+                                                <p className="text-xs text-red-500 uppercase font-medium mb-1">Extraction Error</p>
+                                                <p className="text-sm text-red-400">{receipt.error_message}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => onRetry(receipt.id)}
+                                                className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium rounded-lg transition-colors"
+                                            >
+                                                <ArrowPathIcon className="w-4 h-4" />
+                                                Retry
+                                            </button>
                                         </div>
                                     )}
 
