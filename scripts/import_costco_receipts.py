@@ -109,6 +109,13 @@ async def import_receipts(json_file: str, dry_run: bool = False):
             receipt_json_content = json.dumps(entry, indent=2).encode('utf-8')
             filename = f"costco_{txn_date}_{txn_barcode}.json"
             content_type = "application/json"
+
+            # Deduplication Check
+            existing_receipt = database_service.get_receipt_by_filename(filename)
+            if existing_receipt:
+                logger.info(f"Skipping duplicate receipt: {filename} (ID: {existing_receipt.id})")
+                continue
+
             
             # 4. Upload file using StorageService
             # We don't have a request object here for base_url in local mode, 

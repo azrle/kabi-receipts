@@ -85,6 +85,27 @@ class DatabaseService:
             data = self._get_from_local(receipt_id)
             return self._dict_to_receipt(data) if data else None
 
+    def get_receipt_by_filename(self, file_name: str) -> Optional[Receipt]:
+        """Look up a receipt by its unique filename."""
+        if self.mode == "gcs":
+            docs = (
+                self.firestore.collection(self.COLLECTION_NAME)
+                .where("file_name", "==", file_name)
+                .limit(1)
+                .stream()
+            )
+            results = list(docs)
+            if results:
+                return self._dict_to_receipt(results[0].to_dict())
+            return None
+        else:
+            # For local JSON, linear search is acceptable for now
+            all_receipts = self._load_local_db().values()
+            for data in all_receipts:
+                if data.get("file_name") == file_name:
+                    return self._dict_to_receipt(data)
+            return None
+
     def list_receipts(self, limit: int = 100) -> List[Receipt]:
         if self.mode == "gcs":
             from google.cloud import firestore
