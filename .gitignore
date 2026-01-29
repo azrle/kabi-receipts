@@ -208,5 +208,6 @@ __marimo__/
 
 # Local testing
 uploads/
-receipts.json
 backups/
+receipts.json
+costco_receipts.json
