@@ -73,6 +73,31 @@ npm run dev
 Visit `http://localhost:3000`
 
 
+## 🔌 Data Integrations
+
+### Costco Receipt Import
+Import digital Costco receipts directly from your account (via JSON export).
+
+1. **Generate Sample Data** (for testing):
+   ```bash
+   python crawlers/fetch_costco_receipts.py --sample
+   ```
+
+2. **Import Receipts**:
+   ```bash
+   # Local Mode
+   STORAGE_MODE=local python scripts/import_costco_receipts.py costco_sample.json
+   ```
+
+### Database Backup
+Create snapshot backups of your receipt data (supports both Local and Firestore modes).
+
+```bash
+python scripts/backup_db.py
+```
+Backups are saved to `backups/` by default.
+
+
 ## ☁️ Cloud Deployment (GCP)
 
 For production deployment on Google Cloud Run.

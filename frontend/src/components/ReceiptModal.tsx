@@ -2,7 +2,7 @@
 
 import { useState, Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon, TrashIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, TrashIcon, ArrowPathIcon, ArrowLeftIcon } from '@heroicons/react/24/outline'; // Added ArrowLeftIcon
 import { Receipt, formatTotal, getMerchant, getCurrencySymbol } from '@/lib/types';
 import { getReceiptImageUrl } from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -15,13 +15,24 @@ interface ReceiptModalProps {
     onRetry: (id: string) => void;
 }
 
+import CostcoReceiptView from './CostcoReceiptView';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'; // Add icon import if needed, assuming it's available or use text
+
 export default function ReceiptModal({ receipt, isOpen, onClose, onDelete, onRetry }: ReceiptModalProps) {
     if (!receipt) return null;
 
+    const isCostcoJson = receipt.file_type === 'application/json';
     const ed = receipt.extracted_data;
     const items = ed?.items || [];
     const currency = ed?.currency || 'USD';
     const symbol = getCurrencySymbol(currency);
+
+    const [isViewingOriginal, setIsViewingOriginal] = useState(false);
+
+    // Reset view mode when receipt changes or modal closes
+    if (!isOpen && isViewingOriginal) {
+        setIsViewingOriginal(false);
+    }
 
     return (
         <Transition appear show={isOpen} as={Fragment}>
@@ -56,7 +67,7 @@ export default function ReceiptModal({ receipt, isOpen, onClose, onDelete, onRet
                                 <div className="flex items-start justify-between p-6 border-b border-white/10 bg-white/5">
                                     <div className="space-y-1">
                                         <Dialog.Title className="text-2xl font-bold text-white tracking-tight">
-                                            {getMerchant(receipt)}
+                                            {isViewingOriginal ? 'Original Receipt' : getMerchant(receipt)}
                                         </Dialog.Title>
                                         <div className="flex items-center gap-2 text-sm text-gray-400">
                                             <span>{ed?.date || 'Unknown Date'}</span>
@@ -93,109 +104,144 @@ export default function ReceiptModal({ receipt, isOpen, onClose, onDelete, onRet
                                 {/* Content */}
                                 <div className="p-6 max-h-[70vh] overflow-y-auto space-y-8">
 
-                                    {/* Line Items - List View for Mobile, Table for Desktop */}
-                                    <div className="rounded-lg border border-white/5 overflow-hidden">
-                                        {/* Desktop Table */}
-                                        <table className="hidden sm:table w-full text-sm">
-                                            <thead className="bg-white/5">
-                                                <tr className="border-b border-white/5 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                                                    <th className="px-4 py-3 w-1/2">Description</th>
-                                                    <th className="px-4 py-3 text-center">Qty</th>
-                                                    <th className="px-4 py-3 text-right">Price</th>
-                                                    <th className="px-4 py-3 text-right">Total</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-white/5">
-                                                {items.length > 0 ? (
-                                                    items.map((item, idx) => (
-                                                        <tr key={idx} className="hover:bg-white/5 transition-colors">
-                                                            <td className="px-4 py-3 text-gray-200">{item.description}</td>
-                                                            <td className="px-4 py-3 text-center text-gray-400">{item.quantity || 1}</td>
-                                                            <td className="px-4 py-3 text-right text-gray-400">
-                                                                {item.unit_price != null ? `${symbol}${item.unit_price.toFixed(2)}` : '-'}
-                                                            </td>
-                                                            <td className="px-4 py-3 text-right font-medium text-gray-200">
-                                                                {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
-                                                            </td>
+                                    {isViewingOriginal ? (
+                                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                            <CostcoReceiptView receipt={receipt} />
+
+                                            <div className="relative flex items-center justify-center mt-6 pt-6 border-t border-white/10">
+                                                <button
+                                                    onClick={() => setIsViewingOriginal(false)}
+                                                    className="absolute left-0 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                                                    title="Back to Details"
+                                                >
+                                                    <ArrowLeftIcon className="w-5 h-5" />
+                                                </button>
+                                                <DownloadSection receipt={receipt} isJson={true} className="text-center" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Standard Receipt View (Table + Stack) */}
+                                            {/* Line Items - List View for Mobile, Table for Desktop */}
+                                            <div className="rounded-lg border border-white/5 overflow-hidden">
+                                                {/* Desktop Table */}
+                                                <table className="hidden sm:table w-full text-sm">
+                                                    <thead className="bg-white/5">
+                                                        <tr className="border-b border-white/5 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                                                            <th className="px-4 py-3 w-1/2">Description</th>
+                                                            <th className="px-4 py-3 text-center">Qty</th>
+                                                            <th className="px-4 py-3 text-right">Price</th>
+                                                            <th className="px-4 py-3 text-right">Total</th>
                                                         </tr>
-                                                    ))
-                                                ) : (
-                                                    <tr>
-                                                        <td colSpan={4} className="px-4 py-6 text-center text-gray-500 italic">
+                                                    </thead>
+                                                    <tbody className="divide-y divide-white/5">
+                                                        {items.length > 0 ? (
+                                                            items.map((item, idx) => (
+                                                                <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                                                    <td className="px-4 py-3 text-gray-200">{item.description}</td>
+                                                                    <td className="px-4 py-3 text-center text-gray-400">{item.quantity || 1}</td>
+                                                                    <td className="px-4 py-3 text-right text-gray-400">
+                                                                        {item.unit_price != null ? `${symbol}${item.unit_price.toFixed(2)}` : '-'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right font-medium text-gray-200">
+                                                                        {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        ) : (
+                                                            <tr>
+                                                                <td colSpan={4} className="px-4 py-6 text-center text-gray-500 italic">
+                                                                    No line items extracted
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+
+                                                {/* Mobile List View */}
+                                                <div className="sm:hidden divide-y divide-white/5">
+                                                    {items.length > 0 ? (
+                                                        items.map((item, idx) => (
+                                                            <div key={idx} className="p-4 space-y-2 hover:bg-white/5 transition-colors">
+                                                                <div className="flex justify-between items-start gap-4">
+                                                                    <span className="text-gray-200 font-medium line-clamp-2">{item.description}</span>
+                                                                    <span className="font-semibold text-gray-100 whitespace-nowrap">
+                                                                        {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center text-xs text-gray-400">
+                                                                    <span>Qty: {item.quantity || 1}</span>
+                                                                    {item.unit_price != null && (
+                                                                        <span>Price: {symbol}{item.unit_price.toFixed(2)}</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="px-4 py-6 text-center text-gray-500 italic text-sm">
                                                             No line items extracted
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </tbody>
-                                        </table>
-
-                                        {/* Mobile List View */}
-                                        <div className="sm:hidden divide-y divide-white/5">
-                                            {items.length > 0 ? (
-                                                items.map((item, idx) => (
-                                                    <div key={idx} className="p-4 space-y-2 hover:bg-white/5 transition-colors">
-                                                        <div className="flex justify-between items-start gap-4">
-                                                            <span className="text-gray-200 font-medium line-clamp-2">{item.description}</span>
-                                                            <span className="font-semibold text-gray-100 whitespace-nowrap">
-                                                                {item.total != null ? `${symbol}${item.total.toFixed(2)}` : '-'}
-                                                            </span>
                                                         </div>
-                                                        <div className="flex justify-between items-center text-xs text-gray-400">
-                                                            <span>Qty: {item.quantity || 1}</span>
-                                                            {item.unit_price != null && (
-                                                                <span>Price: {symbol}{item.unit_price.toFixed(2)}</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="px-4 py-6 text-center text-gray-500 italic text-sm">
-                                                    No line items extracted
+                                                    )}
                                                 </div>
+                                            </div>
+
+                                            {/* Calculation Stack */}
+                                            <div className="flex flex-col items-end space-y-2 text-sm border-t border-white/10 pt-6">
+                                                <div className="flex justify-between w-full sm:w-1/2 md:w-1/3">
+                                                    <span className="text-gray-400">Subtotal</span>
+                                                    <span className="font-medium">{ed?.subtotal != null ? `${symbol}${ed.subtotal.toFixed(2)}` : '-'}</span>
+                                                </div>
+                                                <div className="flex justify-between w-full sm:w-1/2 md:w-1/3">
+                                                    <span className="text-gray-400">Tax</span>
+                                                    <span className="font-medium">{ed?.tax != null ? `${symbol}${ed.tax.toFixed(2)}` : '-'}</span>
+                                                </div>
+                                                <div className="flex justify-between w-full sm:w-1/2 md:w-1/3 border-b border-white/10 pb-2">
+                                                    <span className="text-gray-400">Tip</span>
+                                                    <span className="font-medium">{ed?.tip != null ? `${symbol}${ed.tip.toFixed(2)}` : '-'}</span>
+                                                </div>
+                                                <div className="flex justify-between w-full sm:w-1/2 md:w-1/3 pt-1">
+                                                    <span className="text-base font-bold text-white">Total</span>
+                                                    <span className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                                                        {formatTotal(receipt) || '0.00'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Additional Info (Footer) */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                                                {/* Payment Info */}
+                                                <div className="p-4 rounded-lg bg-white/5 space-y-1">
+                                                    <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Payment Method</p>
+                                                    <p className="text-sm font-medium text-gray-200">{ed?.payment_method || '—'}</p>
+                                                </div>
+
+                                                {/* Notes */}
+                                                <div className="p-4 rounded-lg bg-white/5 space-y-1">
+                                                    <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Notes</p>
+                                                    <p className="text-sm text-gray-300 italic">
+                                                        {ed?.notes || 'No notes available'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Footer Actions */}
+                                            {isCostcoJson ? (
+                                                <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                                                    <button
+                                                        onClick={() => setIsViewingOriginal(true)}
+                                                        className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full transition-all hover:-translate-y-0.5 border border-white/10"
+                                                    >
+                                                        <span>📄</span>
+                                                        View Original Receipt
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <DownloadSection receipt={receipt} isJson={false} />
                                             )}
-                                        </div>
-                                    </div>
+                                        </>
+                                    )}
 
-                                    {/* Calculation Stack */}
-                                    <div className="flex flex-col items-end space-y-2 text-sm border-t border-white/10 pt-6">
-                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3">
-                                            <span className="text-gray-400">Subtotal</span>
-                                            <span className="font-medium">{ed?.subtotal != null ? `${symbol}${ed.subtotal.toFixed(2)}` : '-'}</span>
-                                        </div>
-                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3">
-                                            <span className="text-gray-400">Tax</span>
-                                            <span className="font-medium">{ed?.tax != null ? `${symbol}${ed.tax.toFixed(2)}` : '-'}</span>
-                                        </div>
-                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3 border-b border-white/10 pb-2">
-                                            <span className="text-gray-400">Tip</span>
-                                            <span className="font-medium">{ed?.tip != null ? `${symbol}${ed.tip.toFixed(2)}` : '-'}</span>
-                                        </div>
-                                        <div className="flex justify-between w-full sm:w-1/2 md:w-1/3 pt-1">
-                                            <span className="text-base font-bold text-white">Total</span>
-                                            <span className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-                                                {formatTotal(receipt) || '0.00'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Additional Info (Footer) */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
-                                        {/* Payment Info */}
-                                        <div className="p-4 rounded-lg bg-white/5 space-y-1">
-                                            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Payment Method</p>
-                                            <p className="text-sm font-medium text-gray-200">{ed?.payment_method || '—'}</p>
-                                        </div>
-
-                                        {/* Notes */}
-                                        <div className="p-4 rounded-lg bg-white/5 space-y-1">
-                                            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Notes</p>
-                                            <p className="text-sm text-gray-300 italic">
-                                                {ed?.notes || 'No notes available'}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Error Message */}
+                                    {/* Error Message - Always show if present */}
                                     {receipt.error_message && (
                                         <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex justify-between items-start gap-4">
                                             <div>
@@ -212,8 +258,6 @@ export default function ReceiptModal({ receipt, isOpen, onClose, onDelete, onRet
                                         </div>
                                     )}
 
-                                    {/* Download Button */}
-                                    <DownloadSection receipt={receipt} />
                                 </div>
                             </Dialog.Panel>
                         </Transition.Child>
@@ -224,16 +268,7 @@ export default function ReceiptModal({ receipt, isOpen, onClose, onDelete, onRet
     );
 }
 
-function DetailItem({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="p-4 bg-white/5 rounded-lg">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
-            <p className="text-lg font-medium">{value}</p>
-        </div>
-    );
-}
-
-function DownloadSection({ receipt }: { receipt: Receipt }) {
+function DownloadSection({ receipt, isJson, className = "mt-6 text-center" }: { receipt: Receipt; isJson: boolean; className?: string }) {
     const [isLoading, setIsLoading] = useState(false);
 
     const handleDownload = async () => {
@@ -249,7 +284,7 @@ function DownloadSection({ receipt }: { receipt: Receipt }) {
     };
 
     return (
-        <div className="mt-6 text-center">
+        <div className={className}>
             <button
                 onClick={handleDownload}
                 disabled={isLoading}
@@ -260,7 +295,7 @@ function DownloadSection({ receipt }: { receipt: Receipt }) {
                 ) : (
                     '📥'
                 )}
-                Download Original
+                {isJson ? 'Download JSON' : 'Download Original'}
             </button>
         </div>
     );
